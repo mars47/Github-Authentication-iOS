@@ -42,7 +42,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
     
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey : Any] = [:]) -> Bool {
-        guard url.scheme == "githubloginfromscratch" else {return false}
+        
+        guard url.scheme == "githubloginfromscratch" else {return false} //Callback looks for this string
         
         url.absoluteString
         
@@ -54,6 +55,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         
         //, url.host == "example.com"
         if url != nil {
+            
+            //1. stores the access token from open URL 'code' parameter,
+            //2. creates a new post request and uses the access token as one of the parameters
+            //3. web request begins, the post request data that is returned is converted to a dictionary
+            //4. the access token is extracted and ready to be used for API calls.
+            //   - it must be put in the request header of any call
+            
+            
             if let code = url.query?.components(separatedBy: "code=").last {
                 let urlString = "https://github.com/login/oauth/access_token"
                 if let tokenUrl = NSURL(string: urlString) {
@@ -67,6 +76,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
                         "code" : code,
                     ]
                     req.httpBody = try? JSONSerialization.data(withJSONObject: params, options: [])
+                    
                     let task = URLSession.shared.dataTask(with: req as URLRequest) { data, response, error in
                         
                         if let data = data {
