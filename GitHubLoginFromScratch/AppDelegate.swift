@@ -13,6 +13,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     
     var window: UIWindow?
     
+    var request: URLRequest! = nil
+    
     
     private func application(application: UIApplication, didFinishLaunchingWithOptions launchOptions: [NSObject: AnyObject]?) -> Bool {
         // Override point for customization after application launch.
@@ -41,11 +43,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Called when the application is about to terminate. Save data if appropriate. See also applicationDidEnterBackground:.
     }
     
+    //How this works
+    
+    //In the last stage of authentication, Github will append a code to your authization callback url which is set in github app settings
+    //it will look something like ---> "githubloginfromscratch://callback?code=bea40cde68b19670ca3a"
+    //when the callback url is invoked inside the browser it will open the app, and the appdelegate method bellow is called
+    
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey : Any] = [:]) -> Bool {
         
-        guard url.scheme == "githubloginfromscratch" else {return false} //Callback looks for this string
-        
-        url.absoluteString
+        guard url.scheme == "githubloginfromscratch" else {return false} //Checkes url scheme of the callback
         
         
         let clientId = "f357c0f9c46f687be6c0"
@@ -56,34 +62,34 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         //, url.host == "example.com"
         if url != nil {
             
-            //1. stores the access token from open URL 'code' parameter,
-            //2. creates a new post request and uses the access token as one of the parameters
-            //3. web request begins, the post request data that is returned is converted to a dictionary
-            //4. the access token is extracted and ready to be used for API calls.
-            //   - it must be put in the request header of any call
+            //1. 'code' is extracted from URL query string and is stored inside code variable
+            //2. a post request is then created and the 'code' is sent back to github as one of the parameters
+            //3. once the post request finishes, the request repsonse is serialised as a JSON object and converted to a dictionary ('content')
+            //4. 'content' has a key that contains the access token needed for API calls. This is stored inside a variable ready for use.
+            //   - 'accessToken' variable must be put inside the request header of any API call
             
             
-            if let code = url.query?.components(separatedBy: "code=").last {
+            if let code = url.query?.components(separatedBy: "code=").last { //1.
                 let urlString = "https://github.com/login/oauth/access_token"
                 if let tokenUrl = NSURL(string: urlString) {
-                    let req = NSMutableURLRequest(url: tokenUrl as URL)
+                    let req = NSMutableURLRequest(url: tokenUrl as URL) //2.
                     req.httpMethod = "POST"
                     req.addValue("application/json", forHTTPHeaderField: "Content-Type")
                     req.addValue("application/json", forHTTPHeaderField: "Accept")
                     let params = [
                         "client_id" : clientId,
                         "client_secret" : clientSecret,
-                        "code" : code,
+                        "code" : code, //2.
                     ]
                     req.httpBody = try? JSONSerialization.data(withJSONObject: params, options: [])
                     
-                    let task = URLSession.shared.dataTask(with: req as URLRequest) { data, response, error in
+                    let task = URLSession.shared.dataTask(with: req as URLRequest) { data, response, error in //3.
                         
                         if let data = data {
                             do {
-                                if let content = try JSONSerialization.jsonObject(with: data, options: []) as? [String: AnyObject] {
-                                    if let accessToken = content["access_token"] as? String {
-                                        self.getUser(accessToken: accessToken)
+                                if let content = try JSONSerialization.jsonObject(with: data, options: []) as? [String: AnyObject] { //3.
+                                    if let accessToken = content["access_token"] as? String { //4.
+                                        self.getPodlockMeta(accessToken: accessToken)
                                     }
                                 }
                             } catch {}
@@ -98,7 +104,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
     
     
-    func getUser(accessToken: String) { 
+    func getPodlockMeta(accessToken: String) {
         let urlString = "https://api.github.com/repos/bbc/mdt-ios-me/contents/Podfile.lock"
         
         if let url = NSURL(string: urlString) {
@@ -106,25 +112,52 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             let req = NSMutableURLRequest(url: url as URL)
             req.addValue("application/json", forHTTPHeaderField: "Accept")
             req.addValue("token \(accessToken)", forHTTPHeaderField: "Authorization")
-//            req.addValue("user%20repo", forHTTPHeaderField: "Scopes")
-                                   // "scope":
             
             let task = URLSession.shared.dataTask(with: req as URLRequest) { data, response, error in
                 
                 if let data = data {
-                    if let content = String(data: data, encoding: String.Encoding.utf8) {
+                    do {
+                        if let content = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
                         
-                        DispatchQueue.main.async {
-                            print(content)
-                            //self.presentingViewController?.dismiss(animated: true, completion: nil)
+                            let downloadUrl = content["download_url"] as! String;
+                            var request = URLRequest(url: URL(string: downloadUrl)!)
+                            request.addValue("application/json", forHTTPHeaderField: "Accept")
+                            request.addValue("token \(accessToken)", forHTTPHeaderField: "Authorization")
+                            self.downloadPodlockFileContents(downloadUrl: request)
+                            
+                            //print(content)
+                            //                        DispatchQueue.main.async {
+                            //                            //self.presentingViewController?.dismiss(animated: true, completion: nil)
+                            //                        }
                         }
-                    }
+                    } catch { }
                 }
             }
             task.resume()
         }
     }
     
+    
+    func downloadPodlockFileContents(downloadUrl: URLRequest) {
+        
+        let task = URLSession.shared.dataTask(with: downloadUrl) { data, response, error in
+            
+            if let data = data {
+                
+                if var content = String(data: data, encoding: String.Encoding.utf8) {
+                
+                    //content = content.replacingOccurrences(of: "\n", with: "[]")
+                    print(content)
+
+                }
+                
+            }
+        }
+        task.resume()
+        
+        
+        
+    }
     
     
 }
