@@ -146,7 +146,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
                 
                 if var content = String(data: data, encoding: String.Encoding.utf8) {
                 
-                    //content = content.replacingOccurrences(of: "\n", with: "[]")
                     print(content)
 
                 }
